@@ -16,6 +16,7 @@ func calculateAvgPointsPerTeam(players []Player) map[string]float64 {
 	teamCounts := make(map[string]int)
 
 	for _, player := range players {
+		fmt.Println(player)
 		teamPoints[player.TeamAbbrev] += player.AvgPointsPerGame
 		teamCounts[player.TeamAbbrev]++
 	}

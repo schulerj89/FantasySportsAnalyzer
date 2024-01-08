@@ -2,11 +2,45 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
 )
 
-// ParseCSV takes a csv.Reader and returns a slice of Player structs
+func getPlayerData(playerName string) Player {
+	// playername needs _ instead of spaces
+	playerName = strings.Replace(playerName, " ", "_", -1)
+	sportsDbUrl := "https://thesportsdb.com/api/v1/json/3/searchplayers.php?p=%s"
+
+	url := fmt.Sprintf(sportsDbUrl, playerName)
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Println(err)
+		return Player{}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println(err)
+		return Player{}
+	}
+
+	var apiResponse APIResponse
+	json.Unmarshal(body, &apiResponse)
+
+	if len(apiResponse.Player) == 0 {
+		fmt.Println("No player found")
+		return Player{}
+	}
+
+	player := apiResponse.Player[0]
+	return player
+}
+
 func ParseCSV(reader *csv.Reader) ([]Player, error) {
 	var players []Player
 
@@ -16,30 +50,48 @@ func ParseCSV(reader *csv.Reader) ([]Player, error) {
 		return nil, err
 	}
 
-	// Iterate over the rest of the lines
 	for {
 		record, err := reader.Read()
 		if err != nil {
 			if err == csv.ErrFieldCount || err == csv.ErrBareQuote || err == csv.ErrQuote {
-				continue // Skip malformed lines
+				continue
 			}
 			break
 		}
 
 		player, err := parseRecord(record)
 		if err != nil {
-			continue // Skip records that can't be parsed
+			continue
 		}
 
 		players = append(players, player)
 	}
 
+	for index, player := range players {
+		apiData := getPlayerData(player.FullName)
+		player = mergePlayerData(player, apiData)
+		players[index] = player
+	}
+
 	return players, nil
 }
 
-// parseRecord converts a record from the CSV into a Player struct
+func mergePlayerData(player Player, apiData Player) Player {
+	player.Nationality = apiData.Nationality
+	player.BirthDate = apiData.BirthDate
+	player.BirthPlace = apiData.BirthPlace
+	player.Description = apiData.Description
+	player.Gender = apiData.Gender
+	player.Height = apiData.Height
+	player.Weight = apiData.Weight
+	player.PlayerThumb = apiData.PlayerThumb
+	player.PlayerCutout = apiData.PlayerCutout
+
+	return player
+}
+
 func parseRecord(record []string) (Player, error) {
-	if len(record) < 9 { // Ensure there are enough fields
+	if len(record) < 9 {
 		return Player{}, csv.ErrFieldCount
 	}
 
